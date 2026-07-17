@@ -42,6 +42,14 @@
     const API_URL = 'https://script.google.com/macros/s/AKfycbxKcILvzkyzgdgR5F1kCsh7xTCPVCpTuCSLiqgjhVDLGrrYq0tgWOMbQ3rk-yTnnOWP/exec';
     let html5QrCode, isBusy = false, currentCardId = null, currentQr = null;
 
+// خواندن خودکار session از آدرس صفحه
+const urlParams = new URLSearchParams(window.location.search);
+const autoSession = urlParams.get('session');
+if (autoSession) {
+  document.getElementById('sessionInput').value = autoSession;
+  document.getElementById('sessionInput').style.display = 'none';
+}
+
     document.getElementById('startBtn').addEventListener('click', function () {
       const sid = document.getElementById('sessionInput').value.trim();
       if (!sid) { alert('Session ID را وارد کنید'); return; }
