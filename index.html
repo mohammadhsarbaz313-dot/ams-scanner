@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>اسکنر AMS</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Tahoma, Arial, sans-serif; direction: rtl; background: #111; color: #fff; min-height: 100vh; }
+    header { background: #0f4c3a; padding: 14px; text-align: center; }
+    .box { padding: 16px; }
+    input, select, button { width: 100%; padding: 14px; border-radius: 10px; border: none; font-size: 15px; margin-bottom: 10px; }
+    button { background: #0f4c3a; color: #fff; cursor: pointer; }
+    #reader { width: 100%; max-width: 400px; margin: 0 auto; display: none; }
+    .result { margin: 16px; padding: 18px; border-radius: 16px; text-align: center; display: none; }
+    .r-inside { background: #1e5631; } .r-outside { background: #1e4a56; } .r-error { background: #5c1e1e; }
+    .result .name { font-size: 20px; font-weight: bold; margin-bottom: 8px; }
+    .result .status { font-size: 14px; margin-bottom: 14px; opacity: .85; }
+    .actions { display: flex; gap: 8px; }
+    .actions button { flex: 1; }
+    .btn-entry { background: #2e7d4f; } .btn-exit { background: #2e6d7d; }
+    #sessionBox { background: #1a1a1a; }
+  </style>
+</head>
+<body>
+  <header><h2>📷 اسکنر AMS</h2></header>
+
+  <div class="box" id="sessionBox">
+    <input id="sessionInput" placeholder="Session ID خود را وارد کنید">
+    <select id="gateSelect">
+      <option>ورودی اصلی</option><option>ورودی خودرو</option><option>ورودی پیاده ۲</option><option>خروجی اصلی</option>
+    </select>
+    <button id="startBtn">📷 شروع اسکن</button>
+  </div>
+
+  <div id="reader"></div>
+  <div class="result" id="resultBox"></div>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxKcILvzkyzgdgR5F1kCsh7xTCPVCpTuCSLiqgjhVDLGrrYq0tgWOMbQ3rk-yTnnOWP/exec';
+    let html5QrCode, isBusy = false, currentCardId = null, currentQr = null;
+
+    document.getElementById('startBtn').addEventListener('click', function () {
+      const sid = document.getElementById('sessionInput').value.trim();
+      if (!sid) { alert('Session ID را وارد کنید'); return; }
+      document.getElementById('sessionBox').style.display = 'none';
+      document.getElementById('reader').style.display = 'block';
+      html5QrCode = new Html5Qrcode('reader');
+      html5QrCode.start({ facingMode: 'environment' }, { fps: 10, qrbox: 250 }, onScan, () => {});
+    });
+
+    function onScan(qrText) {
+      if (isBusy) return;
+      isBusy = true;
+      currentQr = qrText;
+      callApi('checkCard', { qrCode: qrText }, function (res) {
+        isBusy = false;
+        if (!res.success) { showError(res.message); return; }
+        showInfo(res.data);
+      });
+    }
+
+    function callApi(action, extra, cb) {
+      const sid = document.getElementById('sessionInput').value.trim();
+      const gate = document.getElementById('gateSelect').value;
+      const body = Object.assign({ action: action, sessionId: sid, gate: gate }, extra);
+      fetch(API_URL, { method: 'POST', body: JSON.stringify(body) })
+        .then(r => r.json()).then(cb)
+        .catch(e => showError('خطای شبکه: ' + e.message));
+    }
+
+    function showInfo(data) {
+      currentCardId = data.cardId;
+      const box = document.getElementById('resultBox');
+      box.style.display = 'block';
+      box.className = 'result ' + (data.status === 'INSIDE' ? 'r-inside' : 'r-outside');
+      box.innerHTML =
+        '<div class="name">' + data.member.Name + '</div>' +
+        '<div class="status">خانواده: ' + data.family.HeadName + ' | وضعیت فعلی: ' + (data.status === 'INSIDE' ? 'داخل کمپ' : 'خارج از کمپ') + '</div>' +
+        '<div class="actions">' +
+          '<button class="btn-entry" onclick="doAction(\'confirmEntry\')">ثبت ورود</button>' +
+          '<button class="btn-exit" onclick="doAction(\'confirmExit\')">ثبت خروج</button>' +
+        '</div>';
+    }
+
+    function doAction(action) {
+      callApi(action, { cardId: currentCardId }, function (res) {
+        alert(res.success ? res.data.message : res.message);
+        document.getElementById('resultBox').style.display = 'none';
+        isBusy = false;
+      });
+    }
+
+    function showError(msg) {
+      const box = document.getElementById('resultBox');
+      box.style.display = 'block';
+      box.className = 'result r-error';
+      box.innerHTML = '<div class="name">⛔ ' + msg + '</div>';
+      setTimeout(() => { isBusy = false; box.style.display = 'none'; }, 2000);
+    }
+  </script>
+</body>
+</html>
