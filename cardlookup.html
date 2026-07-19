@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>اسکن کارت زائر</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Tahoma, Arial, sans-serif; direction: rtl; background: #111; color: #fff; min-height: 100vh; }
+    header { background: #0f4c3a; padding: 14px; text-align: center; }
+    .box { padding: 16px; }
+    button { width: 100%; padding: 14px; border-radius: 10px; border: none; font-size: 15px; margin-bottom: 10px; background: #0f4c3a; color: #fff; cursor: pointer; }
+    #reader { width: 100%; max-width: 400px; margin: 0 auto; display: none; }
+    .status { text-align: center; padding: 14px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <header><h2>📷 اسکن کارت زائر</h2></header>
+  <div class="box" id="setupBox">
+    <button id="startBtn">📷 شروع اسکن</button>
+  </div>
+  <div id="reader"></div>
+  <div class="status" id="statusLine"></div>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxKcILvzkyzgdgR5F1kCsh7xTCPVCpTuCSLiqgjhVDLGrrYq0tgWOMbQ3rk-yTnnOWP/exec';
+    const APP_BASE_URL = 'https://script.google.com/macros/s/AKfycbxKcILvzkyzgdgR5F1kCsh7xTCPVCpTuCSLiqgjhVDLGrrYq0tgWOMbQ3rk-yTnnOWP/exec';
+
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session');
+    const returnPage = params.get('return'); // 'assets' یا 'depository'
+    let html5QrCode, isBusy = false;
+
+    document.getElementById('startBtn').addEventListener('click', function () {
+      if (!sessionId || !returnPage) {
+        document.getElementById('statusLine').textContent = 'خطا: اطلاعات session یا مقصد ناقص است.';
+        return;
+      }
+      document.getElementById('setupBox').style.display = 'none';
+      document.getElementById('reader').style.display = 'block';
+      html5QrCode = new Html5Qrcode('reader');
+      html5QrCode.start({ facingMode: 'environment' }, { fps: 10, qrbox: 250 }, onScan, () => {});
+    });
+
+    function onScan(qrText) {
+      if (isBusy) return;
+      isBusy = true;
+      document.getElementById('statusLine').textContent = 'در حال بررسی...';
+
+      fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'lookupCard', sessionId: sessionId, qrCode: qrText }) })
+        .then(r => r.json())
+        .then(function (res) {
+          if (!res.success) {
+            document.getElementById('statusLine').textContent = '⛔ ' + res.message;
+            isBusy = false;
+            return;
+          }
+          if (html5QrCode) html5QrCode.stop().catch(() => {});
+          const target = APP_BASE_URL + '?page=' + returnPage + '&memberId=' + encodeURIComponent(res.data.memberId) + '&familyId=' + encodeURIComponent(res.data.familyId);
+          window.location.href = target;
+        })
+        .catch(function (e) {
+          document.getElementById('statusLine').textContent = 'خطای شبکه: ' + e.message;
+          isBusy = false;
+        });
+    }
+  </script>
+</body>
+</html>
