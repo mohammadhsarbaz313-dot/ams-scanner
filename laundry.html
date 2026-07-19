@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>رختشویی</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Tahoma, Arial, sans-serif; direction: rtl; background: #111; color: #fff; min-height: 100vh; }
+    header { background: #0f4c3a; padding: 14px; text-align: center; }
+    .box { padding: 16px; }
+    select, input, button { width: 100%; padding: 14px; border-radius: 10px; border: none; font-size: 15px; margin-bottom: 10px; }
+    button { background: #0f4c3a; color: #fff; cursor: pointer; }
+    #reader { width: 100%; max-width: 400px; margin: 0 auto; display: none; }
+    .result { margin: 16px; padding: 18px; border-radius: 16px; text-align: center; display: none; }
+    .r-ok { background: #1e5631; } .r-warn { background: #6b5a1e; } .r-error { background: #5c1e1e; }
+    .result .name { font-size: 20px; font-weight: bold; margin-bottom: 8px; }
+    .result .status { font-size: 14px; margin-bottom: 14px; opacity: .85; }
+    .actions button { background: #2e7d4f; margin-bottom: 8px; }
+    .btn-return { background: #2e6d7d; }
+  </style>
+</head>
+<body>
+  <header><h2>🧺 رختشویی</h2></header>
+
+  <div class="box" id="setupBox">
+    <input id="sessionInput" placeholder="Session ID">
+    <button id="startBtn">📷 شروع اسکن</button>
+  </div>
+
+  <div id="reader"></div>
+  <div class="result" id="resultBox"></div>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxKcILvzkyzgdgR5F1kCsh7xTCPVCpTuCSLiqgjhVDLGrrYq0tgWOMbQ3rk-yTnnOWP/exec';
+    let html5QrCode, isBusy = false, currentMemberId = null;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const autoSession = urlParams.get('session');
+    if (autoSession) document.getElementById('sessionInput').value = autoSession;
+
+    document.getElementById('startBtn').addEventListener('click', function () {
+      const sid = document.getElementById('sessionInput').value.trim();
+      if (!sid) { alert('Session ID را وارد کنید'); return; }
+      document.getElementById('setupBox').style.display = 'none';
+      document.getElementById('reader').style.display = 'block';
+      html5QrCode = new Html5Qrcode('reader');
+      html5QrCode.start({ facingMode: 'environment' }, { fps: 10, qrbox: 250 }, onScan, () => {});
+    });
+
+    function onScan(qrText) {
+      if (isBusy) return;
+      isBusy = true;
+      callApi('checkLaundryCard', { qrCode: qrText }, function (res) {
+        if (!res.success) { showError(res.message); return; }
+        showInfo(res.data);
+      });
+    }
+
+    function callApi(action, extra, cb) {
+      const sid = document.getElementById('sessionInput').value.trim();
+      const body = Object.assign({ action: action, sessionId: sid }, extra);
+      fetch(API_URL, { method: 'POST', body: JSON.stringify(body) })
+        .then(r => r.json()).then(cb)
+        .catch(e => showError('خطای شبکه: ' + e.message));
+    }
+
+    function showInfo(data) {
+      currentMemberId = data.memberId;
+      const box = document.getElementById('resultBox');
+      box.style.display = 'block';
+
+      if (data.hasOpenOrder) {
+        box.className = 'result r-warn';
+        box.innerHTML =
+          '<div class="name">' + data.memberName + '</div>' +
+          '<div class="status">سفارش «در حال شست‌وشو» دارد: ' + (data.openOrderItems || '-') + '</div>' +
+          '<div class="actions"><button class="btn-return" onclick="doReturn()">✅ ثبت تحویل لباس‌ها</button></div>';
+      } else {
+        box.className = 'result r-ok';
+        box.innerHTML =
+          '<div class="name">' + data.memberName + '</div>' +
+          '<div class="status">خانواده: ' + data.familyHeadName + ' | سفارش بازی ندارد</div>' +
+          '<input id="itemsInput" placeholder="توضیح لباس‌ها (مثلاً: ۲ دست لباس، ۱ حوله)">' +
+          '<div class="actions"><button onclick="doReceive()">📥 ثبت دریافت لباس</button></div>';
+      }
+    }
+
+    function doReceive() {
+      const items = document.getElementById('itemsInput').value.trim();
+      callApi('confirmReceiveLaundry', { memberId: currentMemberId, items: items }, function (res) {
+        alert(res.success ? res.data.message : res.message);
+        document.getElementById('resultBox').style.display = 'none';
+        isBusy = false;
+      });
+    }
+
+    function doReturn() {
+      callApi('confirmReturnLaundry', { memberId: currentMemberId }, function (res) {
+        alert(res.success ? res.data.message : res.message);
+        document.getElementById('resultBox').style.display = 'none';
+        isBusy = false;
+      });
+    }
+
+    function showError(msg) {
+      const box = document.getElementById('resultBox');
+      box.style.display = 'block';
+      box.className = 'result r-error';
+      box.innerHTML = '<div class="name">⛔ ' + msg + '</div>';
+      setTimeout(() => { isBusy = false; box.style.display = 'none'; }, 2000);
+    }
+  </script>
+</body>
+</html>
